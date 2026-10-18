@@ -1,6 +1,6 @@
 // Overview: this month's spending, money in & out, Dad, budgets and charts.
 
-import { state, ui, expensesInMonth, byCategory, budgets, isSpending, isIncome, dadBalance } from '../store.js';
+import { state, ui, expensesInMonth, byCategory, budgets, isSpending, isIncome, dadBalance, dadUnsure } from '../store.js';
 import { getLatest } from '../rates.js';
 import { esc, money, sum, monthLabel, monthName, addMonths, daysInMonth } from '../util.js';
 import { barChart } from '../charts.js';
@@ -35,6 +35,7 @@ export function dashboard(root) {
   const leftOver = Math.round((earned - spentAll) * 100) / 100;
   const hasIncome = state.expenses.some(isIncome);
   const hasDad = state.expenses.some(e => e.dad);
+  const unsureCount = dadUnsure().items.length;
   const budgetRows = budgets(ym);
   const alerts = budgetRows.filter(b => b.status !== 'ok');
 
@@ -67,7 +68,7 @@ export function dashboard(root) {
     ${hasDad ? `
       <a class="card link-card" href="#/dad">
         <span class="row-icon" aria-hidden="true">👨</span>
-        <span>${dadBalanceText(dadBalance())}</span>
+        <span>${dadBalanceText(dadBalance())}${unsureCount ? `<br><span class="muted small">🤷 ${unsureCount} not decided yet</span>` : ''}</span>
         <span class="chev" aria-hidden="true">›</span>
       </a>` : ''}
 

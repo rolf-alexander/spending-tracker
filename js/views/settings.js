@@ -137,7 +137,7 @@ async function exportJSON() {
   if (ok) { await markBackedUp(); toast('Backup saved'); }
 }
 
-// type: expense / income / dad. dad: owe, owed, repay, repaid or loan (empty if not Dad-related).
+// type: expense / income / dad. dad: owe, owed, gift, maybe-owe, maybe-owed, repay, repaid or loan (empty if not Dad-related).
 export const CSV_HEADER = ['id', 'date', 'type', 'amount', 'currency', 'amount_chf', 'rate', 'category', 'trip', 'dad', 'note', 'merchant'];
 
 async function exportCSV() {

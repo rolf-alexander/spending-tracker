@@ -13,6 +13,9 @@ offline and keeps all your data on your phone. Nothing is sent to a server.
   Trip spending doesn't count towards your monthly budgets.
 - **Dad:** mark an expense "Dad paid (I owe him)" or "For Dad (he owes me)", and record repayments
   and loans. The Dad screen (Settings → Dad) shows who owes whom. Things bought for Dad don't count as your spending.
+  Not sure yet? Choose **🤷 Not sure if Dad pays me back** or **🤷 Dad paid, not sure if I owe him**. These don't change
+  the balance; they wait under "Not decided yet" on the Dad screen until you tap one and decide
+  (e.g. "Dad will pay me back", "It's my own spending" or "It's a gift from Dad").
 - Import bank statements. **UBS**, Revolut, Wise and neon are recognised automatically, or use any CSV.
   Sort the transactions one by one (tap a category and the next one appears) and create rules
   that sort merchants automatically next time.

@@ -153,6 +153,9 @@ function renderFields() {
         <option value="">👤 Just me</option>
         <option value="owe" ${draft.dad === 'owe' ? 'selected' : ''}>👨 Dad paid (I owe him)</option>
         <option value="owed" ${draft.dad === 'owed' ? 'selected' : ''}>👨 For Dad (he owes me)</option>
+        <option value="maybe-owed" ${draft.dad === 'maybe-owed' ? 'selected' : ''}>🤷 Not sure if Dad pays me back</option>
+        <option value="maybe-owe" ${draft.dad === 'maybe-owe' ? 'selected' : ''}>🤷 Dad paid, not sure if I owe him</option>
+        <option value="gift" ${draft.dad === 'gift' ? 'selected' : ''}>🎁 Dad paid, it’s a gift</option>
       </select>`;
     const trip = box.querySelector('#edTrip');
     trip.onchange = async () => {

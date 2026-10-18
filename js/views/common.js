@@ -97,7 +97,7 @@ function expenseRow(e, showTrip) {
     icon = cat.emoji;
     slot = cat.slot;
     title = e.note || e.merchant || cat.name;
-    sub = [cat.name, showTrip && e.trip ? `🧳 ${e.trip}` : '', e.dad ? `👨 ${DAD_TYPES[e.dad].short}` : ''].filter(Boolean).join(' · ');
+    sub = [cat.name, showTrip && e.trip ? `🧳 ${e.trip}` : '', e.dad ? `${DAD_TYPES[e.dad].emoji} ${DAD_TYPES[e.dad].short}` : ''].filter(Boolean).join(' · ');
     if (kind === 'income') sign = '+';
   }
   return `

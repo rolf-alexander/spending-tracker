@@ -1,7 +1,7 @@
 // The app's data: loads everything from the database into memory and saves changes back.
 //
 // Every entry has a `kind`:
-//   'expense' - money you spent (may be marked dad: 'owe' or 'owed')
+//   'expense' - money you spent (may be marked dad: 'owe', 'owed', 'gift', 'maybe-owe' or 'maybe-owed')
 //   'income'  - money you earned
 //   'dad'     - money moving between you and Dad (dad: 'repay', 'repaid' or 'loan')
 
@@ -49,7 +49,15 @@ export const DAD_TYPES = {
   repay: { emoji: '↩️', label: 'I paid Dad back', short: 'Paid Dad back', owe: -1, out: true },
   repaid: { emoji: '💸', label: 'Dad paid me back', short: 'Dad paid me back', owe: +1 },
   loan: { emoji: '🤝', label: 'Dad lent me money', short: 'Loan from Dad', owe: +1 },
+  gift: { emoji: '🎁', label: 'Dad paid, it’s a gift', short: 'Gift from Dad', owe: 0 },
+  // Not decided yet: these don't change the balance until you decide.
+  'maybe-owed': { emoji: '🤷', label: 'Not sure if Dad pays me back', short: 'Dad pays me back?', owe: 0, unsure: true },
+  'maybe-owe': { emoji: '🤷', label: 'Dad paid, not sure if I owe him', short: 'I owe Dad?', owe: 0, unsure: true },
 };
+
+// Expense entries can carry these Dad types (the rest are Dad money moves).
+export const DAD_EXPENSE_TYPES = ['owe', 'owed', 'gift', 'maybe-owe', 'maybe-owed'];
+export const isUnsure = e => Boolean(DAD_TYPES[e.dad]?.unsure);
 
 const DEFAULT_SETTINGS = {
   warnThreshold: 0.8,
@@ -65,7 +73,8 @@ const DEFAULT_SETTINGS = {
 export const BACKUP_SETTINGS = ['warnThreshold', 'theme', 'lastCurrency', 'trips'];
 
 export const kindOf = e => e.kind || 'expense';
-export const isSpending = e => kindOf(e) === 'expense' && e.dad !== 'owed'; // things bought for Dad are his spending
+// Things bought for Dad are his spending, and gifts from Dad cost you nothing.
+export const isSpending = e => kindOf(e) === 'expense' && e.dad !== 'owed' && e.dad !== 'gift';
 export const isIncome = e => kindOf(e) === 'income';
 export const expenseCategories = () => state.categories.filter(c => c.kind !== 'income');
 export const incomeCategories = () => state.categories.filter(c => c.kind === 'income');
@@ -241,7 +250,7 @@ export async function deleteCategory(id, moveTo) {
 // A target is a category id, or 'dad:<type>' for the Dad options.
 // Money going out can be spending or Dad; money coming in can be income or Dad.
 
-export const DAD_TARGETS = { out: ['owed', 'repay'], in: ['repaid', 'loan'] };
+export const DAD_TARGETS = { out: ['owed', 'maybe-owed', 'repay'], in: ['repaid', 'loan'] };
 
 export function targetIds(direction) {
   const cats = direction === 'in' ? incomeCategories() : expenseCategories();
@@ -260,7 +269,7 @@ export function targetInfo(target) {
 export function applyTarget(target) {
   if (target.startsWith('dad:')) {
     const dad = target.slice(4);
-    return dad === 'owed'
+    return DAD_EXPENSE_TYPES.includes(dad)
       ? { kind: 'expense', category: fallbackCategory('expense'), dad }
       : { kind: 'dad', category: '', dad };
   }
@@ -270,7 +279,7 @@ export function applyTarget(target) {
 export const defaultTarget = direction => fallbackCategory(direction === 'in' ? 'income' : 'expense');
 
 const directionOf = e => (isIncome(e) || ['repaid', 'loan'].includes(e.dad) ? 'in' : 'out');
-const currentTarget = e => (kindOf(e) === 'dad' || e.dad === 'owed' ? `dad:${e.dad}` : e.category);
+const currentTarget = e => (kindOf(e) === 'dad' || ['owed', 'maybe-owed'].includes(e.dad) ? `dad:${e.dad}` : e.category);
 
 // ---- Auto-categorise rules ----
 
@@ -390,6 +399,13 @@ export function budgets(ym) {
 export function dadBalance() {
   const total = state.expenses.reduce((t, e) => t + (e.dad && DAD_TYPES[e.dad] ? DAD_TYPES[e.dad].owe * e.chf : 0), 0);
   return Math.round(total * 100) / 100;
+}
+
+// Undecided Dad entries: what Dad might owe you, and what you might owe him.
+export function dadUnsure() {
+  const items = state.expenses.filter(isUnsure);
+  const total = dad => Math.round(items.filter(e => e.dad === dad).reduce((t, e) => t + e.chf, 0) * 100) / 100;
+  return { items, mightOweMe: total('maybe-owed'), mightOweDad: total('maybe-owe') };
 }
 
 // ---- Backup ----

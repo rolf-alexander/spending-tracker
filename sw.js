@@ -1,7 +1,7 @@
 // Service worker: keeps a copy of the app's files on the phone so it opens offline.
 // IMPORTANT: when you change any app file, increase VERSION so phones download the update.
 
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 const CACHE = `spending-${VERSION}`;
 
 const FILES = [

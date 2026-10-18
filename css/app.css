@@ -625,3 +625,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.4); }
   .keypad { gap: 5px; }
   .keypad button { min-height: 42px; }
 }
+
+/* Dad: deciding an undecided entry */
+.stack { display: grid; gap: 8px; margin-top: 12px; }
+.stack .btn { width: 100%; }
