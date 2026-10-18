@@ -4,6 +4,7 @@ import { state, ui, expensesInMonth, byCategory, budgets, isSpending, isIncome, 
 import { getLatest } from '../rates.js';
 import { esc, money, sum, monthLabel, monthName, addMonths, daysInMonth } from '../util.js';
 import { barChart } from '../charts.js';
+import { cloudConfig } from '../cloud.js';
 import { setTitle, monthNav, bindMonthNav, segmented, bindSegmented, dadBalanceText } from './common.js';
 
 export function dashboard(root) {
@@ -111,6 +112,9 @@ function notices() {
   const out = [];
   if (getLatest().fallback) {
     out.push(`<p class="notice">📡 Exchange rates haven't been downloaded yet. Foreign amounts use approximate rates until you're online.</p>`);
+  }
+  if (cloudConfig()?.token && state.settings.ghError) {
+    out.push(`<p class="notice">⚠️ Automatic backup isn't working. <a href="#/settings">See why</a></p>`);
   }
   const last = state.settings.lastBackupAt;
   const DAY = 86400000;

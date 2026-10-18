@@ -409,7 +409,8 @@ export function snapshot() {
 
 export async function restore(data, mode) {
   if (mode === 'replace') {
-    const cachedRates = (await db.getAll('settings')).filter(s => s.key.startsWith('rates:'));
+    // Keep this phone's downloaded rates and its GitHub backup connection.
+    const cachedRates = (await db.getAll('settings')).filter(s => s.key.startsWith('rates:') || s.key.startsWith('gh'));
     await db.replaceAll({
       expenses: data.expenses,
       categories: data.categories,

@@ -28,8 +28,32 @@ offline and keeps all your data on your phone. Nothing is sent to a server.
 ## Backing up (important!)
 
 Your data lives only inside the app on your phone. If you delete the app from your
-home screen, or the phone is lost or reset, the data is gone, so back up regularly.
-The app reminds you if you haven't backed up for a month.
+home screen, or the phone is lost or reset, the data is gone, so back up.
+
+### Automatic backup to GitHub (recommended)
+
+While the app is open and online, it uploads a backup to the **private** repository
+[rolf-alexander/spending-backup](https://github.com/rolf-alexander/spending-backup)
+shortly after anything changes, and right away when you switch to another app.
+Every upload is kept as a separate version. (iPhone web apps can't run in the background,
+so nothing is uploaded while the app is closed.)
+
+**One-time set-up** (easiest on your iPhone in Safari, so you can copy and paste):
+1. Go to **github.com/settings/personal-access-tokens/new** and log in.
+2. **Token name:** `Spending app backup`. **Expiration:** the longest option offered.
+3. **Repository access:** *Only select repositories* → pick **spending-backup**.
+4. **Permissions** → **Repository permissions** → **Contents** → **Read and write**.
+5. Tap **Generate token** and copy it (it starts with `github_pat_`).
+6. In the app: **Settings → Automatic backup → Set up automatic backup**, paste the token, tap **Connect**.
+
+If the token expires, the app shows "Automatic backup isn't working". Make a new token
+(steps 1–5) and tap **Set up again**.
+
+**Restore:** Settings → Automatic backup → **Restore…** → pick a backup (the newest is
+at the top) → **Replace**. On a new phone, install the app, then set up automatic
+backup with a token. The app finds the existing backup and offers to restore it.
+
+### Backup to a file
 
 **To back up:** Settings → **Back up (JSON)** → choose **Save to Files** → pick
 **iCloud Drive** (or anywhere you like).
@@ -75,6 +99,7 @@ Plain HTML, CSS and JavaScript. No frameworks and no build step.
 | `js/store.js` | The data: expenses, categories, budgets, rules, trips, backups |
 | `js/db.js` | Saving to the phone's built-in database (IndexedDB) |
 | `js/rates.js` | Exchange rates and conversion to CHF |
+| `js/cloud.js` | Automatic backup to GitHub |
 | `js/csv.js` | Reading CSV files and the bank formats |
 | `js/charts.js` | The bar chart |
 | `js/views/*.js` | One file per screen (`editor.js` is the quick-add screen, `dad.js` the Dad screen) |

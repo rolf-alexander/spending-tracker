@@ -10,6 +10,7 @@ import { esc, money, toast, showDialog, confirmDialog, alertDialog, saveFile, re
 import { parseCSV, toObjects, toCSV, parseAmount } from '../csv.js';
 import { setTitle, segmented, bindSegmented, targetOptions, dadBalanceText } from './common.js';
 import { applyTheme } from '../theme.js';
+import { cloudConfig, checkSetup, remoteBackupExists, backupNow, listBackups, fetchBackup, disconnect } from '../cloud.js';
 
 export function settings(root) {
   setTitle('Settings');
@@ -46,9 +47,11 @@ export function settings(root) {
       <button type="button" class="btn" id="refreshRates">Update rates now</button>
     </section>
 
+    <section class="card" id="cloudBox"></section>
+
     <section class="card">
-      <h2>Backup</h2>
-      <p class="muted small">Your data lives only on this phone. Save a backup to Files or iCloud Drive now and then.
+      <h2>Backup to a file</h2>
+      <p class="muted small">Save a copy to Files or iCloud Drive, e.g. before changing phones.
         ${last ? `Last backup: ${shortDate(new Date(last).toISOString().slice(0, 10))}.` : '<strong>No backup yet.</strong>'}</p>
       <div class="btn-row">
         <button type="button" class="btn primary" id="exportJson">Back up (JSON)</button>
@@ -86,6 +89,7 @@ export function settings(root) {
       settings(root);
     }
   };
+  renderCloud(root.querySelector('#cloudBox'));
   root.querySelector('#exportJson').onclick = exportJSON;
   root.querySelector('#exportCsv').onclick = exportCSV;
   root.querySelector('#restoreFile').onchange = async ev => {
@@ -152,6 +156,127 @@ async function restoreFrom(file) {
     else await restoreCSV(text);
   } catch (err) {
     await alertDialog("Couldn't restore", `This file doesn't look like a Spending Tracker backup. (${err.message})`);
+  }
+}
+
+// ---- Automatic backup to GitHub ----
+
+const when = ms => new Date(ms).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+
+function renderCloud(box) {
+  const cfg = cloudConfig();
+  if (!cfg?.token) {
+    box.innerHTML = `
+      <h2>Automatic backup</h2>
+      <p class="muted small">Back up to a private GitHub repository automatically whenever something changes
+        (while the app is open and online). You can go back to any earlier backup too.</p>
+      <button type="button" class="btn primary" id="cloudSetup">Set up automatic backup</button>`;
+    box.querySelector('#cloudSetup').onclick = () => setupCloud(box);
+    return;
+  }
+  const err = state.settings.ghError;
+  const last = state.settings.ghLastBackupAt;
+  box.innerHTML = `
+    <h2>Automatic backup</h2>
+    <p class="${err ? 'alert over' : 'muted small'}">${err
+      ? `<span aria-hidden="true">⚠️</span> <span>${esc(err)}</span>`
+      : `✅ On. Backing up to <a href="https://github.com/${esc(cfg.repo)}/commits/main" target="_blank" rel="noopener">${esc(cfg.repo)}</a>.
+         ${last ? `Last backup: ${esc(when(last))}.` : 'No backup yet.'}`}</p>
+    <div class="btn-row">
+      <button type="button" class="btn primary" id="cloudNow">Back up now</button>
+      <button type="button" class="btn" id="cloudRestore">Restore…</button>
+      <button type="button" class="btn ghost" id="cloudOff">Turn off</button>
+    </div>
+    ${err ? '<button type="button" class="btn small" id="cloudSetup">Set up again</button>' : ''}`;
+
+  box.querySelector('#cloudNow').onclick = async ev => {
+    ev.target.disabled = true;
+    ev.target.textContent = 'Backing up…';
+    try {
+      const result = await backupNow({ manual: true });
+      toast(result === 'done' ? 'Backed up to GitHub' : result === 'offline' ? "You're offline. It'll back up when you're online" : 'Nothing to back up yet');
+    } catch (e) {
+      toast("Backup didn't work. See the message in Settings");
+    }
+    renderCloud(box);
+  };
+  box.querySelector('#cloudRestore').onclick = () => restoreFromCloud();
+  box.querySelector('#cloudOff').onclick = async () => {
+    if (!(await confirmDialog('Turn off automatic backup?', 'Your backups stay on GitHub. You can set it up again later.', 'Turn off', 'primary'))) return;
+    await disconnect();
+    renderCloud(box);
+  };
+  box.querySelector('#cloudSetup')?.addEventListener('click', () => setupCloud(box));
+}
+
+async function setupCloud(box) {
+  const result = await showDialog({
+    title: 'Automatic backup',
+    body: `
+      <p class="small">Paste the GitHub token for your backup repository (it starts with <code>github_pat_</code>).
+        It's stored only on this phone.</p>
+      <label class="field">Token<input type="password" name="token" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+      <label class="field">Repository<input type="text" name="repo" value="${esc(cloudConfig()?.repo || 'spending-backup')}" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+      <p class="form-error" role="alert"></p>`,
+    buttons: [
+      { label: 'Cancel', value: null, style: 'ghost' },
+      { label: 'Connect', value: true, style: 'primary', validate: d => d.querySelector('[name=token]').value.trim() !== '' && d.querySelector('[name=repo]').value.trim() !== '' },
+    ],
+    collect: d => ({ token: d.querySelector('[name=token]').value.trim(), repo: d.querySelector('[name=repo]').value.trim() }),
+  });
+  if (!result) return;
+  toast('Checking with GitHub…');
+  let repo;
+  try {
+    repo = await checkSetup(result.token, result.repo);
+  } catch (err) {
+    await alertDialog("Couldn't connect", err.message || String(err));
+    return;
+  }
+  await setSetting('ghBackup', { repo, token: result.token });
+  await setSetting('ghError', '');
+  await setSetting('ghLastHash', null);
+  // A new or empty phone: offer the existing backup instead of overwriting it.
+  if (!state.expenses.length && (await remoteBackupExists())) {
+    renderCloud(box);
+    if (await confirmDialog('Backup found', 'There is already a backup in this repository. Restore it onto this phone?', 'Choose backup', 'primary')) {
+      await restoreFromCloud();
+    }
+    return;
+  }
+  try {
+    await backupNow({ manual: true });
+    toast('Connected. First backup done');
+  } catch {
+    toast("Connected, but the first backup didn't work");
+  }
+  renderCloud(box);
+}
+
+async function restoreFromCloud() {
+  let backups;
+  try {
+    backups = await listBackups();
+  } catch (err) {
+    await alertDialog("Couldn't load backups", navigator.onLine ? err.message : "You're offline.");
+    return;
+  }
+  if (!backups.length) {
+    await alertDialog('No backups yet', 'Nothing has been backed up to this repository yet.');
+    return;
+  }
+  const ref = await showDialog({
+    title: 'Restore from GitHub',
+    body: `<label class="field">Choose a backup<select name="ref">${backups.map((b, i) => `
+      <option value="${esc(b.ref)}">${esc(when(Date.parse(b.date)))}: ${esc(b.message.replace(/^Backup: /, ''))}${i === 0 ? ' (latest)' : ''}</option>`).join('')}</select></label>`,
+    buttons: [{ label: 'Cancel', value: null, style: 'ghost' }, { label: 'Next', value: true, style: 'primary' }],
+    collect: d => d.querySelector('[name=ref]').value,
+  });
+  if (!ref) return;
+  try {
+    await restoreJSON(await fetchBackup(ref));
+  } catch (err) {
+    await alertDialog("Couldn't restore", err.message);
   }
 }
 

@@ -10,6 +10,7 @@ import { tripsView, tripDetail } from './views/trips.js';
 import { settings, categoriesView, rulesView } from './views/settings.js';
 import { importer } from './views/importer.js';
 import { dadView } from './views/dad.js';
+import { startAutoBackup } from './cloud.js';
 import { openEditor, editorOpen } from './views/editor.js';
 
 const routes = {
@@ -99,6 +100,7 @@ async function boot() {
   navigator.storage?.persist?.().catch(() => {});
   updateRates();
   window.addEventListener('online', updateRates);
+  startAutoBackup();
 }
 
 boot().catch(err => {
