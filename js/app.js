@@ -9,6 +9,7 @@ import { list } from './views/list.js';
 import { tripsView, tripDetail } from './views/trips.js';
 import { settings, categoriesView, rulesView } from './views/settings.js';
 import { importer } from './views/importer.js';
+import { dadView } from './views/dad.js';
 import { openEditor, editorOpen } from './views/editor.js';
 
 const routes = {
@@ -20,9 +21,10 @@ const routes = {
   categories: categoriesView,
   rules: rulesView,
   import: importer,
+  dad: dadView,
 };
 // Which tab is highlighted for each screen
-const tabFor = { trip: 'trips', categories: 'settings', rules: 'settings', import: 'settings' };
+const tabFor = { trip: 'trips', categories: 'settings', rules: 'settings', import: 'settings', dad: 'settings' };
 
 const main = document.getElementById('main');
 

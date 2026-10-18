@@ -1,27 +1,40 @@
-// Trips: totals per trip tag, plus an "active trip" that new expenses are tagged with.
+// Trips: plan trips with dates, see what each one cost (including things bought beforehand).
 
-import { state, trips, setSetting, renameTrip } from '../store.js';
-import { esc, money, shortDate, showDialog, confirmDialog, toast } from '../util.js';
+import { state, trips, saveTrip, deleteTrip, isSpending } from '../store.js';
+import { esc, money, sum, shortDate, todayISO, confirmDialog, toast, notifyChange } from '../util.js';
 import { setTitle, expenseList, bindExpenseList } from './common.js';
 import { categoryList } from './dashboard.js';
-import { notifyChange } from './editor.js';
+import { tripDialog } from './tripdialog.js';
 
 const tripHref = name => `#/trip/${encodeURIComponent(name)}`;
-const days = (from, to) => Math.round((new Date(to) - new Date(from)) / 86400000) + 1;
+const daysBetween = (from, to) => Math.round((new Date(to) - new Date(from)) / 86400000);
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+function status(t, today) {
+  if (!t.start || !t.end) return '';
+  if (today < t.start) return `<span class="badge">In ${plural(daysBetween(today, t.start), 'day')}</span>`;
+  if (today <= t.end) return '<span class="badge now">Now</span>';
+  return '';
+}
+
+function dateRange(t) {
+  if (t.start && t.end) return `${shortDate(t.start)} – ${shortDate(t.end)}`;
+  if (t.start) return `From ${shortDate(t.start)}`;
+  if (t.from) return `${shortDate(t.from)} – ${shortDate(t.to)}`;
+  return 'No dates';
+}
 
 export function tripsView(root) {
   setTitle('Trips');
-  const active = state.settings.activeTrip;
+  const today = todayISO();
   const all = trips();
-  if (active && !all.some(t => t.name === active)) all.unshift({ name: active, total: 0, count: 0 });
 
   root.innerHTML = `
     <section class="card">
-      ${active
-        ? `<p>🧳 You're on <strong>${esc(active)}</strong>. New expenses are tagged with it automatically.</p>
-           <button type="button" class="btn" id="endTrip">End trip</button>`
-        : `<p class="muted">Start a trip and every new expense gets tagged with it, so you can see what the whole trip cost. Trip spending doesn't count towards your monthly budgets.</p>
-           <button type="button" class="btn primary" id="startTrip">Start a trip</button>`}
+      <p class="muted small">Plan a trip with its dates and everything you add during the trip is tagged automatically.
+        For things you buy beforehand, like flights or gear, pick the trip when you add them. Your everyday
+        groceries stay untagged. Trip spending doesn't count towards your monthly budgets.</p>
+      <button type="button" class="btn primary" id="planTrip">Plan a trip</button>
     </section>
 
     ${all.length ? `
@@ -31,78 +44,69 @@ export function tripsView(root) {
             <a class="row" href="${tripHref(t.name)}">
               <span class="row-icon" aria-hidden="true">🧳</span>
               <span class="row-main">
-                <span class="row-title">${esc(t.name)} ${t.name === active ? '<span class="badge">Active</span>' : ''}</span>
-                <span class="row-sub">${t.count ? `${shortDate(t.from)} – ${shortDate(t.to)} · ${t.count} expense${t.count === 1 ? '' : 's'}` : 'No expenses yet'}</span>
+                <span class="row-title">${esc(t.name)} ${status(t, today)}</span>
+                <span class="row-sub">${dateRange(t)} · ${plural(t.count, 'expense')}</span>
               </span>
               <span class="row-amount num">${money(t.total)}</span>
             </a>
           </li>`).join('')}
-      </ul>` : '<p class="muted center pad">No trips yet. You can also type a trip name when adding an expense.</p>'}`;
+      </ul>` : ''}`;
 
-  root.querySelector('#startTrip')?.addEventListener('click', async () => {
-    const name = await askTripName('Start a trip', '');
-    if (!name) return;
-    await setSetting('activeTrip', name);
-    toast(`New expenses will be tagged “${name}”`);
+  root.querySelector('#planTrip').onclick = async () => {
+    const t = await tripDialog(null);
+    if (!t) return;
+    await saveTrip(null, t);
+    toast(`Trip “${t.name}” created`);
     tripsView(root);
-  });
-  root.querySelector('#endTrip')?.addEventListener('click', async () => {
-    await setSetting('activeTrip', '');
-    tripsView(root);
-  });
+  };
 }
 
 export function tripDetail(root, name) {
   setTitle(name, '#/trips');
+  const info = trips().find(t => t.name === name) || { name, start: '', end: '', total: 0 };
   const items = state.expenses.filter(e => e.trip === name);
-  const info = trips().find(t => t.name === name);
-  const isActive = state.settings.activeTrip === name;
+  const spending = items.filter(isSpending);
+  const before = info.start ? sum(spending.filter(e => e.date < info.start)) : 0;
+  const during = sum(spending) - before;
+  const tripDays = info.start && info.end ? daysBetween(info.start, info.end) + 1 : 0;
   const byCurrency = {};
-  for (const e of items) byCurrency[e.currency] = (byCurrency[e.currency] || 0) + e.amount;
+  for (const e of spending) byCurrency[e.currency] = (byCurrency[e.currency] || 0) + e.amount;
+  const currencies = Object.keys(byCurrency);
 
   root.innerHTML = `
     <section class="card hero">
       <p class="muted">Trip total</p>
-      <p class="hero-figure">${money(info?.total || 0)}</p>
-      ${info ? `<p class="muted small">${shortDate(info.from)} – ${shortDate(info.to)} · ${days(info.from, info.to)} day${days(info.from, info.to) === 1 ? '' : 's'} ·${money(info.total / days(info.from, info.to))} per day</p>` : ''}
-      ${Object.keys(byCurrency).length > 1 || (Object.keys(byCurrency)[0] && Object.keys(byCurrency)[0] !== 'CHF')
-        ? `<p class="muted small">Paid: ${Object.entries(byCurrency).map(([c, v]) => money(v, c)).join(' · ')}</p>` : ''}
+      <p class="hero-figure">${money(sum(spending))}</p>
+      <p class="muted small">${dateRange(info)}${tripDays ? ` · ${plural(tripDays, 'day')}` : ''}</p>
+      ${before ? `<p class="muted small">Before the trip ${money(before)}${during ? ` · During ${money(during)}` : ''}</p>` : ''}
+      ${during && tripDays ? `<p class="muted small">${money(during / tripDays)} a day during the trip</p>` : ''}
+      ${currencies.length > 1 || (currencies[0] && currencies[0] !== 'CHF')
+        ? `<p class="muted small">Paid: ${currencies.map(c => money(byCurrency[c], c)).join(' · ')}</p>` : ''}
     </section>
     <div class="btn-row">
-      <button type="button" class="btn" id="toggleActive">${isActive ? 'End trip' : 'Make active'}</button>
-      <button type="button" class="btn" id="rename">Rename</button>
+      <button type="button" class="btn" id="editTrip">Edit trip</button>
+      <button type="button" class="btn danger" id="deleteTrip">Delete trip</button>
     </div>
     <section class="card">
       <h2>By category</h2>
-      ${categoryList(items)}
+      ${categoryList(spending)}
     </section>
     <div id="tripList">${expenseList(items, { showTrip: false })}</div>`;
 
   bindExpenseList(root.querySelector('#tripList'));
-  root.querySelector('#toggleActive').onclick = async () => {
-    await setSetting('activeTrip', isActive ? '' : name);
-    toast(isActive ? 'Trip ended' : `New expenses will be tagged “${name}”`);
-    tripDetail(root, name);
-  };
-  root.querySelector('#rename').onclick = async () => {
-    const to = await askTripName('Rename trip', name);
-    if (!to || to === name) return;
-    if (trips().some(t => t.name === to) && !(await confirmDialog('Merge trips?', `A trip called “${to}” already exists. The two will be combined.`, 'Merge', 'primary'))) return;
-    await renameTrip(name, to);
+  root.querySelector('#editTrip').onclick = async () => {
+    const t = await tripDialog(info);
+    if (!t) return;
+    await saveTrip(name, t);
     notifyChange();
-    location.hash = tripHref(to);
+    if (t.name !== name) location.hash = tripHref(t.name);
   };
-}
-
-function askTripName(title, value) {
-  return showDialog({
-    title,
-    body: `<label class="field">Trip name<input type="text" name="trip" value="${esc(value)}" placeholder="e.g. Japan 2027" autocomplete="off"></label>`,
-    buttons: [
-      { label: 'Cancel', value: null, style: 'ghost' },
-      { label: 'OK', value: true, style: 'primary', validate: d => d.querySelector('[name=trip]').value.trim() !== '' },
-    ],
-    onOpen: d => d.querySelector('input').focus(),
-    collect: d => d.querySelector('[name=trip]').value.trim(),
-  });
+  root.querySelector('#deleteTrip').onclick = async () => {
+    const ok = await confirmDialog('Delete this trip?',
+      items.length ? `Its ${plural(items.length, 'expense')} will be kept, just without the trip tag.` : 'It has no expenses yet.');
+    if (!ok) return;
+    await deleteTrip(name);
+    notifyChange();
+    location.hash = '#/trips';
+  };
 }

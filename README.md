@@ -3,13 +3,19 @@
 A personal spending tracker that runs as an app on your iPhone. It works completely
 offline and keeps all your data on your phone. Nothing is sent to a server.
 
-- Add expenses in CHF, EUR, GBP, JPY or CAD. Everything is converted to CHF using
+- Add money you **spent** or **earned** in CHF, EUR, GBP, JPY or CAD. Everything is converted to CHF using
   European Central Bank rates (from the free [Frankfurter](https://frankfurter.dev) service),
   which are saved on the phone for offline use.
 - Categories with monthly budgets, and a warning when you get close (80% by default).
-- Trips (e.g. "Japan 2027") with their own totals. Trip spending doesn't count towards your monthly budgets.
-- Import bank statements (Revolut, Wise and neon are recognised automatically, or any CSV),
-  with rules that sort merchants into categories.
+  The Overview shows what you earned, spent and have left over each month.
+- **Trips** (e.g. "Japan 2027") with dates. Anything added during the trip is tagged automatically.
+  For things bought beforehand (flights, gear), pick the trip when adding them.
+  Trip spending doesn't count towards your monthly budgets.
+- **Dad:** mark an expense "Dad paid (I owe him)" or "For Dad (he owes me)", and record repayments
+  and loans. The Dad screen (Settings → Dad) shows who owes whom. Things bought for Dad don't count as your spending.
+- Import bank statements. **UBS**, Revolut, Wise and neon are recognised automatically, or use any CSV.
+  Sort the transactions one by one (tap a category and the next one appears) and create rules
+  that sort merchants automatically next time.
 - Backup and restore as JSON or CSV.
 
 ## Installing on your iPhone
@@ -71,6 +77,6 @@ Plain HTML, CSS and JavaScript. No frameworks and no build step.
 | `js/rates.js` | Exchange rates and conversion to CHF |
 | `js/csv.js` | Reading CSV files and the bank formats |
 | `js/charts.js` | The bar chart |
-| `js/views/*.js` | One file per screen |
+| `js/views/*.js` | One file per screen (`editor.js` is the quick-add screen, `dad.js` the Dad screen) |
 | `sw.js` | The "service worker" that makes the app work offline |
 | `manifest.webmanifest`, `icons/` | What makes it installable, with its name and icon |

@@ -151,11 +151,16 @@ export async function saveFile(filename, text, mime) {
   return true;
 }
 
-export function readFile(file) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result);
-    r.onerror = () => reject(r.error);
-    r.readAsText(file);
-  });
+// Reads a text file. Most files are UTF-8, but some bank exports use the older
+// Windows encoding (where "Zürich" would otherwise turn into "Z�rich").
+export async function readFile(file) {
+  const bytes = await file.arrayBuffer();
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return new TextDecoder('windows-1252').decode(bytes);
+  }
 }
+
+// Tells the app that data changed, so the current screen redraws.
+export const notifyChange = () => window.dispatchEvent(new CustomEvent('datachange'));

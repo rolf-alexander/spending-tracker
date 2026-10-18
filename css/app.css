@@ -564,3 +564,64 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.4); }
 .toast button { border: none; background: none; color: var(--accent-soft); font-weight: 700; padding: 4px; }
 :root[data-theme="dark"] .toast button { color: var(--accent); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .toast button { color: var(--accent); } }
+
+/* ---------- Income, Dad & money in/out (v1.1) ---------- */
+.pos { color: var(--good-ink); }
+.neg { color: var(--critical-ink); }
+.row-amount.pos { color: var(--good-ink); }
+.money-rows { margin: 0; }
+.money-rows div { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; }
+.money-rows dt { color: var(--ink-2); }
+.money-rows dd { margin: 0; font-weight: 600; }
+.money-rows .total { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 10px; }
+.money-rows .total dt { color: var(--ink); font-weight: 600; }
+.money-rows .total dd { font-size: 19px; font-weight: 700; }
+.link-card { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--ink); }
+.link-card > span:nth-child(2) { flex: 1; }
+.hero-line { font-size: 22px; margin-bottom: 8px; }
+.section-title { margin: 20px 0 8px; padding: 0 4px; }
+.choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+.btn.choice { justify-content: flex-start; text-align: left; font-weight: 500; font-size: 15px; background: var(--surface); }
+.badge.now { color: var(--good-ink); }
+.form-error { color: var(--critical-ink); font-size: 14px; min-height: 1em; }
+.center-row { justify-content: center; }
+.filter-row.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* Quick-add: Spent / Earned / Dad tabs and the extra fields */
+.ed-modes { flex: 1; max-width: 250px; margin: 0; }
+.ed-modes button { padding: 6px 4px; }
+.ed-fields #edNote { grid-column: 1 / -1; }
+.ed-fields.single { grid-template-columns: 1fr; }
+.ed-fields select { min-height: 40px; padding: 8px 28px 8px 10px; font-size: 14px; }
+.cat-grid .wide-choice { grid-column: 1 / -1; flex-direction: row; justify-content: flex-start; gap: 12px; padding: 10px 14px; min-height: 52px; }
+.cat-grid .wide-choice .cat-name { font-size: 15px; color: var(--ink); }
+
+/* Import: sorting one by one */
+.review-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.progress { height: 4px; border-radius: 2px; background: var(--surface-2); margin-bottom: 12px; overflow: hidden; }
+.progress div { height: 100%; background: var(--accent); }
+.review-card { text-align: center; }
+.review-dir { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.review-title { font-size: 20px; font-weight: 600; overflow-wrap: anywhere; }
+.review-amount { font-size: 32px; font-weight: 700; margin: 4px 0; }
+.review-grid { margin-bottom: 10px; overflow: visible; }
+.review-trip { margin-bottom: 10px; }
+.remember { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; color: var(--ink-2); margin-bottom: 12px; }
+.remember input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--accent); }
+.remember input[type="text"] { flex: 1; min-width: 140px; min-height: 38px; padding: 6px 10px; }
+.review-actions { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 8px; margin-bottom: 12px; }
+.imp-row select + select { margin-top: 6px; }
+.cat-grid .half { grid-column: span 2; flex-direction: row; justify-content: flex-start; gap: 8px; padding: 8px 10px; text-align: left; }
+.cat-grid .half .cat-name { white-space: normal; font-size: 13px; color: var(--ink); }
+@media (max-height: 700px) {
+  .ed-amount { padding: 2px 0 0; }
+  .amount-display { font-size: 36px; }
+  .cur-row { margin-bottom: 6px; }
+  .cur-row button { min-height: 34px; }
+  .cat-grid { gap: 6px; }
+  .cat-grid button { min-height: 50px; padding: 4px 2px; }
+  .cat-emoji { font-size: 19px; }
+  .ed-fields { margin: 6px 0 4px; gap: 6px; }
+  .keypad { gap: 5px; }
+  .keypad button { min-height: 42px; }
+}

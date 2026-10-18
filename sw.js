@@ -1,7 +1,7 @@
 // Service worker: keeps a copy of the app's files on the phone so it opens offline.
 // IMPORTANT: when you change any app file, increase VERSION so phones download the update.
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const CACHE = `spending-${VERSION}`;
 
 const FILES = [
@@ -24,6 +24,8 @@ const FILES = [
   'js/views/trips.js',
   'js/views/settings.js',
   'js/views/importer.js',
+  'js/views/dad.js',
+  'js/views/tripdialog.js',
   'icons/icon.svg',
   'icons/icon-192.png',
   'icons/icon-512.png',

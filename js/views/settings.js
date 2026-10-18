@@ -1,14 +1,14 @@
 // Settings: categories & budgets, rules, exchange rates, backup, appearance.
 
 import {
-  state, setSetting, saveCategory, deleteCategory, moveCategory, categoryById,
+  state, setSetting, saveCategory, deleteCategory, moveCategory, categoryById, kindOf, dadBalance,
   saveRule, deleteRule, applyRulesToImported, snapshot, restore, eraseEverything, addExpenses, fixEstimated,
+  expenseCategories, incomeCategories, targetInfo, DAD_TYPES,
 } from '../store.js';
 import { getLatest, refresh, CURRENCIES } from '../rates.js';
-import { esc, money, toast, showDialog, confirmDialog, alertDialog, saveFile, readFile, todayISO, shortDate } from '../util.js';
+import { esc, money, toast, showDialog, confirmDialog, alertDialog, saveFile, readFile, todayISO, shortDate, notifyChange } from '../util.js';
 import { parseCSV, toObjects, toCSV, parseAmount } from '../csv.js';
-import { setTitle, segmented, bindSegmented } from './common.js';
-import { notifyChange } from './editor.js';
+import { setTitle, segmented, bindSegmented, targetOptions, dadBalanceText } from './common.js';
 import { applyTheme } from '../theme.js';
 
 export function settings(root) {
@@ -19,9 +19,10 @@ export function settings(root) {
 
   root.innerHTML = `
     <ul class="rows card flush">
-      <li><a class="row" href="#/categories"><span class="row-icon" aria-hidden="true">🏷️</span><span class="row-main"><span class="row-title">Categories & budgets</span><span class="row-sub">${state.categories.length} categories · ${state.categories.filter(c => c.budget > 0).length} with a budget</span></span><span class="chev" aria-hidden="true">›</span></a></li>
+      <li><a class="row" href="#/categories"><span class="row-icon" aria-hidden="true">🏷️</span><span class="row-main"><span class="row-title">Categories & budgets</span><span class="row-sub">${expenseCategories().length} for spending · ${incomeCategories().length} for income · ${state.categories.filter(c => c.budget > 0).length} with a budget</span></span><span class="chev" aria-hidden="true">›</span></a></li>
+      <li><a class="row" href="#/dad"><span class="row-icon" aria-hidden="true">👨</span><span class="row-main"><span class="row-title">Dad</span><span class="row-sub">${dadBalanceText(dadBalance()).replace(/<\/?strong>/g, '')}</span></span><span class="chev" aria-hidden="true">›</span></a></li>
       <li><a class="row" href="#/rules"><span class="row-icon" aria-hidden="true">🪄</span><span class="row-main"><span class="row-title">Auto-categorise rules</span><span class="row-sub">${state.rules.length} rule${state.rules.length === 1 ? '' : 's'} for bank imports</span></span><span class="chev" aria-hidden="true">›</span></a></li>
-      <li><a class="row" href="#/import"><span class="row-icon" aria-hidden="true">🏦</span><span class="row-main"><span class="row-title">Import bank statement</span><span class="row-sub">Revolut, Wise, neon or any CSV</span></span><span class="chev" aria-hidden="true">›</span></a></li>
+      <li><a class="row" href="#/import"><span class="row-icon" aria-hidden="true">🏦</span><span class="row-main"><span class="row-title">Import bank statement</span><span class="row-sub">UBS, Revolut, Wise, neon or any CSV</span></span><span class="chev" aria-hidden="true">›</span></a></li>
     </ul>
 
     <section class="card">
@@ -132,11 +133,13 @@ async function exportJSON() {
   if (ok) { await markBackedUp(); toast('Backup saved'); }
 }
 
-export const CSV_HEADER = ['id', 'date', 'amount', 'currency', 'amount_chf', 'rate', 'category', 'trip', 'note', 'merchant'];
+// type: expense / income / dad. dad: owe, owed, repay, repaid or loan (empty if not Dad-related).
+export const CSV_HEADER = ['id', 'date', 'type', 'amount', 'currency', 'amount_chf', 'rate', 'category', 'trip', 'dad', 'note', 'merchant'];
 
 async function exportCSV() {
   const rows = [CSV_HEADER, ...state.expenses.map(e => [
-    e.id, e.date, e.amount, e.currency, e.chf, e.rate, categoryById(e.category).name, e.trip, e.note, e.merchant || '',
+    e.id, e.date, kindOf(e), e.amount, e.currency, e.chf, e.rate, e.category ? categoryById(e.category).name : '',
+    e.trip, e.dad || '', e.note, e.merchant || '',
   ])];
   const ok = await saveFile(`spending-${stamp()}.csv`, toCSV(rows), 'text/csv');
   if (ok) { await markBackedUp(); toast('CSV exported'); }
@@ -158,9 +161,9 @@ async function restoreJSON(data) {
   }
   const mode = await showDialog({
     title: 'Restore backup',
-    body: `<p>The backup from ${esc(shortDate(data.exportedAt.slice(0, 10)))} has ${data.expenses.length} expenses.</p>
+    body: `<p>The backup from ${esc(shortDate(data.exportedAt.slice(0, 10)))} has ${data.expenses.length} entries.</p>
            <p class="muted small"><strong>Replace</strong> deletes what's on this phone and uses the backup instead.
-           <strong>Merge</strong> only adds expenses that aren't here yet.</p>`,
+           <strong>Merge</strong> only adds entries that aren't here yet.</p>`,
     buttons: [
       { label: 'Cancel', value: null, style: 'ghost' },
       { label: 'Merge', value: 'merge' },
@@ -182,19 +185,28 @@ async function restoreCSV(text) {
   }
   const known = new Set(state.expenses.map(e => e.id));
   const fresh = records.filter(r => !r.id || !known.has(r.id));
-  if (!(await confirmDialog('Import CSV', `Add ${fresh.length} expense${fresh.length === 1 ? '' : 's'} from this file? (${records.length - fresh.length} already here.)`, 'Add', 'primary'))) return;
+  if (!(await confirmDialog('Import CSV', `Add ${fresh.length} entr${fresh.length === 1 ? 'y' : 'ies'} from this file? (${records.length - fresh.length} already here.)`, 'Add', 'primary'))) return;
 
-  const byName = new Map(state.categories.map(c => [c.name.toLowerCase(), c.id]));
+  // Categories are matched by name (spending and income separately); missing ones are created.
+  const key = (kind, name) => `${kind}|${name.toLowerCase()}`;
+  const byName = new Map(state.categories.map(c => [key(c.kind === 'income' ? 'income' : 'expense', c.name), c.id]));
   const list = [];
   for (const r of fresh) {
-    let cat = byName.get((r.category || 'Other').toLowerCase());
-    if (!cat) {
-      cat = (await saveCategory({ name: r.category || 'Other' })).id;
-      byName.set((r.category || 'Other').toLowerCase(), cat);
+    const kind = ['income', 'dad'].includes(r.type) ? r.type : 'expense';
+    let cat = '';
+    if (kind !== 'dad') {
+      const name = r.category || (kind === 'income' ? 'Other income' : 'Other');
+      cat = byName.get(key(kind, name));
+      if (!cat) {
+        cat = (await saveCategory({ name, ...(kind === 'income' ? { kind } : {}) })).id;
+        byName.set(key(kind, name), cat);
+      }
     }
     const amount = parseAmount(r.amount);
     if (!r.date || Number.isNaN(amount)) continue;
-    const e = { date: r.date, amount, currency: r.currency || 'CHF', category: cat, trip: r.trip || '', note: r.note || '', source: 'csv' };
+    const dad = DAD_TYPES[r.dad] ? r.dad : '';
+    if (kind === 'dad' && !dad) continue;
+    const e = { kind, date: r.date, amount, currency: r.currency || 'CHF', category: cat, dad, trip: kind === 'expense' ? r.trip || '' : '', note: r.note || '', source: 'csv' };
     if (r.id) e.id = r.id;
     if (r.merchant) e.merchant = r.merchant;
     const chf = parseAmount(r.amount_chf);
@@ -203,40 +215,45 @@ async function restoreCSV(text) {
   }
   await addExpenses(list);
   notifyChange();
-  toast(`Added ${list.length} expenses`);
+  toast(`Added ${list.length} entries`);
 }
 
 // ---- Categories & budgets ----
 
 export function categoriesView(root) {
   setTitle('Categories & budgets', '#/settings');
+  const rows = list => list.map(c => `
+    <li><button type="button" class="row" data-id="${esc(c.id)}">
+      <span class="row-icon" style="--dot: var(--c${c.slot})" aria-hidden="true">${c.emoji}</span>
+      <span class="row-main"><span class="row-title">${esc(c.name)}</span>
+      ${c.kind === 'income' ? '' : `<span class="row-sub">${c.budget > 0 ? `Budget ${money(c.budget, 'CHF', { whole: true })} / month` : 'No budget'}</span>`}</span>
+      <span class="chev" aria-hidden="true">›</span>
+    </button></li>`).join('');
   root.innerHTML = `
+    <h2 class="pad-x section-title">Spending</h2>
     <p class="muted small pad-x">Set a monthly budget (in CHF) for any category. Leave it at 0 for no budget. Spending tagged with a trip doesn't count.</p>
-    <ul class="rows card flush">
-      ${state.categories.map(c => `
-        <li><button type="button" class="row" data-id="${esc(c.id)}">
-          <span class="row-icon" style="--dot: var(--c${c.slot})" aria-hidden="true">${c.emoji}</span>
-          <span class="row-main"><span class="row-title">${esc(c.name)}</span>
-          <span class="row-sub">${c.budget > 0 ? `Budget ${money(c.budget, 'CHF', { whole: true })} / month` : 'No budget'}</span></span>
-          <span class="chev" aria-hidden="true">›</span>
-        </button></li>`).join('')}
-    </ul>
-    <button type="button" class="btn primary wide" id="addCat">Add category</button>`;
+    <ul class="rows card flush">${rows(expenseCategories())}</ul>
+    <button type="button" class="btn primary wide" data-add="expense">Add spending category</button>
+
+    <h2 class="pad-x section-title">Income</h2>
+    <ul class="rows card flush">${rows(incomeCategories())}</ul>
+    <button type="button" class="btn wide" data-add="income">Add income category</button>`;
 
   root.querySelectorAll('[data-id]').forEach(b => { b.onclick = () => editCategory(root, categoryById(b.dataset.id)); });
-  root.querySelector('#addCat').onclick = () => editCategory(root, null);
+  root.querySelectorAll('[data-add]').forEach(b => { b.onclick = () => editCategory(root, null, b.dataset.add); });
 }
 
-async function editCategory(root, cat) {
-  const others = state.categories.filter(c => c.id !== cat?.id);
+async function editCategory(root, cat, newKind = 'expense') {
+  const kind = cat ? (cat.kind === 'income' ? 'income' : 'expense') : newKind;
+  const others = (kind === 'income' ? incomeCategories() : expenseCategories()).filter(c => c.id !== cat?.id);
   const result = await showDialog({
-    title: cat ? 'Edit category' : 'New category',
+    title: cat ? 'Edit category' : kind === 'income' ? 'New income category' : 'New spending category',
     body: `
       <div class="field-row">
         <label class="field emoji-field">Icon<input type="text" name="emoji" value="${esc(cat?.emoji || '🏷️')}" maxlength="4" autocomplete="off"></label>
         <label class="field grow">Name<input type="text" name="name" value="${esc(cat?.name || '')}" autocomplete="off"></label>
       </div>
-      <label class="field">Monthly budget (CHF)<input type="number" name="budget" inputmode="decimal" min="0" step="10" value="${cat?.budget || ''}" placeholder="0 = no budget"></label>
+      ${kind === 'income' ? '' : `<label class="field">Monthly budget (CHF)<input type="number" name="budget" inputmode="decimal" min="0" step="10" value="${cat?.budget || ''}" placeholder="0 = no budget"></label>`}
       ${cat ? `<div class="btn-row">
         <button type="submit" class="btn small" value="up">↑ Move up</button>
         <button type="submit" class="btn small" value="down">↓ Move down</button>
@@ -250,7 +267,7 @@ async function editCategory(root, cat) {
       action,
       name: d.querySelector('[name=name]').value.trim(),
       emoji: d.querySelector('[name=emoji]').value.trim() || '🏷️',
-      budget: Math.max(0, Number(d.querySelector('[name=budget]').value) || 0),
+      budget: Math.max(0, Number(d.querySelector('[name=budget]')?.value) || 0),
     }),
   });
   if (!result) return;
@@ -259,13 +276,16 @@ async function editCategory(root, cat) {
   if (result === 'up' || result === 'down') {
     await moveCategory(cat.id, result === 'up' ? -1 : 1);
   } else if (result.action === 'save') {
-    await saveCategory({ ...(cat ? { id: cat.id } : {}), name: result.name, emoji: result.emoji, budget: result.budget });
+    await saveCategory({
+      ...(cat ? { id: cat.id } : kind === 'income' ? { kind } : {}),
+      name: result.name, emoji: result.emoji, budget: kind === 'income' ? 0 : result.budget,
+    });
   } else if (result.action === 'delete') {
     const used = state.expenses.filter(e => e.category === cat.id).length;
     const moveTo = await showDialog({
       title: `Delete “${cat.name}”?`,
-      body: `<p>${used ? `${used} expense${used === 1 ? '' : 's'} will be moved to:` : 'Its rules will be moved to:'}</p>
-        <select name="moveTo" class="wide">${others.map(c => `<option value="${esc(c.id)}" ${c.id === 'other' ? 'selected' : ''}>${c.emoji} ${esc(c.name)}</option>`).join('')}</select>`,
+      body: `<p>${used ? `${used} entr${used === 1 ? 'y' : 'ies'} will be moved to:` : 'Its rules will be moved to:'}</p>
+        <select name="moveTo" class="wide">${others.map(c => `<option value="${esc(c.id)}" ${['other', 'otherincome'].includes(c.id) ? 'selected' : ''}>${c.emoji} ${esc(c.name)}</option>`).join('')}</select>`,
       buttons: [{ label: 'Cancel', value: null, style: 'ghost' }, { label: 'Delete', value: true, style: 'danger' }],
       collect: d => d.querySelector('[name=moveTo]').value,
     });
@@ -283,10 +303,11 @@ export function rulesView(root) {
   const rules = [...state.rules].sort((a, b) => a.pattern.localeCompare(b.pattern));
   root.innerHTML = `
     <p class="muted small pad-x">When you import a bank statement, a merchant name containing the text of a rule
-      gets that rule's category. Capital letters don't matter, and the longest matching text wins.</p>
+      is sorted the rule's way. Capital letters don't matter, and the longest matching text wins.
+      Tip: a rule with Dad's name → “Dad paid me back” sorts his transfers automatically.</p>
     ${rules.length ? `<ul class="rows card flush">
       ${rules.map(r => {
-        const c = categoryById(r.category);
+        const c = targetInfo(r.category);
         return `<li><button type="button" class="row" data-id="${esc(r.id)}">
           <span class="row-icon" style="--dot: var(--c${c.slot})" aria-hidden="true">${c.emoji}</span>
           <span class="row-main"><span class="row-title">contains “${esc(r.pattern)}”</span><span class="row-sub">→ ${esc(c.name)}</span></span>
@@ -312,13 +333,13 @@ export function rulesView(root) {
 // Opens the rule form. Returns true when something was saved or deleted.
 export async function editRule(rule, defaults = {}) {
   const pattern = rule?.pattern ?? defaults.pattern ?? '';
-  const category = rule?.category ?? defaults.category ?? state.categories[0].id;
+  const category = rule?.category ?? defaults.category ?? expenseCategories()[0].id;
   const result = await showDialog({
     title: rule ? 'Edit rule' : defaults.title || 'New rule',
     body: `
       ${defaults.intro ? `<p>${defaults.intro}</p>` : ''}
       <label class="field">If the merchant name contains<input type="text" name="pattern" value="${esc(pattern)}" autocomplete="off" autocapitalize="off"></label>
-      <label class="field">put it in<select name="category">${state.categories.map(c => `<option value="${esc(c.id)}" ${c.id === category ? 'selected' : ''}>${c.emoji} ${esc(c.name)}</option>`).join('')}</select></label>`,
+      <label class="field">sort it as<select name="category">${targetOptions(category, defaults.direction || 'both')}</select></label>`,
     buttons: [
       ...(rule ? [{ label: 'Delete', value: 'delete', style: 'danger' }] : []),
       { label: defaults.cancelLabel || 'Cancel', value: null, style: 'ghost' },
